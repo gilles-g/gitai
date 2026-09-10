@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "gitai",
+  "owner": {
+    "name": "gilles-g"
+  },
+  "metadata": {
+    "description": "Local pull-request-style review of a git diff, handed back to Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "gitai",
+      "source": "./",
+      "description": "Review a local git diff in a pull-request-style page, comment on lines, and hand the comments back to Claude with the protocol to apply them.",
+      "version": "0.2.0",
+      "category": "workflow",
+      "keywords": ["review", "diff", "git", "pull-request", "code-review"]
+    }
+  ]
+}
