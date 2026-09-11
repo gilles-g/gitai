@@ -6,6 +6,9 @@ to one line — then hand the comments back to Claude Code with the protocol to 
 No service, no account, no network. A single Python script, the standard library, and a page that
 opens offline.
 
+![A branch under review in gitai (light theme): file tree on the left, unified diff on the right, review progress and Finish review in the toolbar](docs/review-light.png)
+![The same review in gitai (dark theme)](docs/review-dark.png)
+
 ## Why
 
 A large diff is unreadable in a terminal, and there is no way to say *"this line is wrong"* other
@@ -15,6 +18,12 @@ gitai renders the diff as a page, lets you click a line to comment on it, and �
 **Finish review** — writes the comments to disk next to a `TODO.md` explaining how they should be
 handled. Claude Code reads that file and applies them, with the explicit right to refuse a comment
 it believes is wrong.
+
+![Commenting on a line: the form opens right under it, and the comment is typed as one of three kinds — Must fix, Follow-up or Workflow note](docs/comment-form.png)
+
+A comment is not just a remark: its kind says what should happen to it. **Must fix** is applied to
+the code, **Follow-up** is reported back without touching anything, **Workflow note** is a lesson
+about the way of working.
 
 ## Install
 
