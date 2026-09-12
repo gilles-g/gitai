@@ -50,6 +50,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
+from urllib.request import ProxyHandler, Request, build_opener
 
 MODEL_VERSION = 1
 
@@ -194,12 +195,61 @@ def paths_from_header(lines):
     return before, after
 
 
+C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
+
+
+def unquote_c(path):
+    """core.quotepath=false leaves non-ASCII alone, but a quote, a backslash or a control
+    character still gets the path quoted C-style: read back verbatim, we\\"ird.txt is a file that
+    does not exist, with no fingerprint and a red --check."""
+    out, i = bytearray(), 0
+    while i < len(path):
+        c = path[i]
+        if c != "\\" or i + 1 >= len(path):
+            out += c.encode("utf-8")
+            i += 1
+            continue
+        n = path[i + 1]
+        if n in C_ESCAPES:
+            out.append(C_ESCAPES[n])
+            i += 2
+        elif n in "01234567":
+            j = i + 1
+            while j < len(path) and j < i + 4 and path[j] in "01234567":
+                j += 1
+            out.append(int(path[i + 1:j], 8) & 0xFF)
+            i = j
+        else:
+            out += n.encode("utf-8")
+            i += 2
+    return out.decode("utf-8", errors="replace")
+
+
+def unquote(path):
+    if path.startswith('"') and path.endswith('"') and len(path) > 1:
+        return unquote_c(path[1:-1])
+    return path
+
+
+def split_quoted(rest):
+    """The two halves of a "diff --git" line when git quoted them: the closing quote is the
+    first one not escaped, a space inside the name splits nothing."""
+    i = 1
+    while i < len(rest):
+        if rest[i] == "\\":
+            i += 2
+            continue
+        if rest[i] == '"':
+            return unquote(rest[:i + 1]), unquote(rest[i + 2:])
+        i += 1
+    return unquote(rest), ""
+
+
 def strip_path(rest, prefix=True):
     path = rest.split("\t", 1)[0].rstrip("\n")
     if path == "/dev/null":
         return None
-    if path.startswith('"') and path.endswith('"') and len(path) > 1:
-        path = path[1:-1]
+    path = unquote(path)
     if prefix and len(path) > 2 and path[1] == "/":
         path = path[2:]
     return path
@@ -207,6 +257,11 @@ def strip_path(rest, prefix=True):
 
 def path_from_git_header(line):
     rest = line[len("diff --git "):].rstrip("\n") if line.startswith("diff --git ") else ""
+    if rest.startswith('"'):
+        left, right = split_quoted(rest)
+        if left.startswith("a/") and right.startswith("b/") and left[2:] == right[2:]:
+            return left[2:]
+        return left[2:] if left.startswith("a/") else left
     for i, c in enumerate(rest):
         if c != " ":
             continue
@@ -391,7 +446,9 @@ def build_model(repo, base=None):
         f["generated"] = bool(GENERATED.search(f["path"]))
         f["fingerprint"] = (None if f["status"] == "suppression"
                           else fingerprint(repo / f["path"]))
-        f["note"] = f.get("note") or STATUS_NOTES.get(f["status"])
+        # A rename whose contents changed too carries hunks: the note would hide them, under
+        # a header still announcing their +/-.
+        f["note"] = f.get("note") or (None if f["hunks"] else STATUS_NOTES.get(f["status"]))
     return {
         "version": MODEL_VERSION,
         "generated": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -451,7 +508,7 @@ def numstat_totals(repo, base):
             bouts = line.split("\t", 2)
             if len(bouts) != 3:
                 continue
-            path = numstat_path(bouts[2])
+            path = numstat_path(unquote(bouts[2]))
             a, s = totaux.get(path, (0, 0))
             if a is None or bouts[0] == "-" or bouts[1] == "-":
                 totaux[path] = (None, None)
@@ -1847,6 +1904,12 @@ def sanitize_state(raw):
                 continue
             if isinstance(valeur, bool) or not isinstance(valeur, type_attendu):
                 raise ValueError(f"invalid {cle} on {cid}")
+        # write_todo indexes the window with it: out of range, /done died server-side and
+        # answered the page nothing.
+        anchor, offset = e.get("anchor"), e.get("anchorOffset")
+        if isinstance(anchor, str) and offset is not None and \
+                not 0 <= offset < len(anchor.split("\n")):
+            raise ValueError(f"anchorOffset out of range on {cid}")
         propres.append({k: v for k, v in e.items() if k in COMMENT_KEYS})
     return {
         "version": MODEL_VERSION,
@@ -2168,6 +2231,21 @@ def serve(review, max_minutes):
           else "server stopped without Finish review")
 
 
+def answers(url, token):
+    """A live pid proves nothing: the number of a server killed abruptly goes to the next
+    process to start, and --stop-all would SIGTERM a stranger. Only the token identifies it."""
+    if not isinstance(url, str) or not isinstance(token, str):
+        return False
+    req = Request(url.split("/review.html", 1)[0] + "/ping", data=b"{}", method="POST",
+                  headers={"X-Gitai-Token": token, "Content-Type": "application/json"})
+    try:
+        # http_proxy in the environment would route 127.0.0.1 through the proxy.
+        with build_opener(ProxyHandler({})).open(req, timeout=2) as r:
+            return r.status == 200
+    except (OSError, ValueError):
+        return False
+
+
 def live_servers():
     """Servers declared under ~/.claude/reviews, with the real state of their process.
 
@@ -2187,7 +2265,8 @@ def live_servers():
             except (OSError, ProcessLookupError):
                 alive = False
         found.append({"dossier": file.parent, "pid": pid, "url": data.get("url"),
-                        "alive": alive})
+                        "alive": alive and answers(data.get("url"), data.get("token")),
+                        "pid_alive": alive})
     return found
 
 
@@ -2236,7 +2315,9 @@ def main():
             print("no review server declared")
             return 0
         for t in found:
-            state = "alive" if t["alive"] else "process gone (stale record)"
+            state = ("alive" if t["alive"]
+                     else "pid alive but not answering as gitai (stale record, not stopped)"
+                     if t["pid_alive"] else "process gone (stale record)")
             print(f"{state} · pid {t['pid']} · {t['dossier']}")
             if t["url"]:
                 print(f"  {t['url']}")
