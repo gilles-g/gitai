@@ -82,6 +82,14 @@ The parts that cannot be deduced from a single file:
   turns out to carry hunks. Symmetrically, a submodule bump writes its `Subproject commit` lines
   *inside* a hunk, never in the header: it comes out `modif`, showing both SHAs, and `--numstat`
   confirms its 1/1 — the `sousmodule` status is in practice what `nested_repo_record` uses.
+  Same family: `STATUS_NOTES` is only attached to a record **without hunks**, and `render_file`
+  shows the note *instead of* the table — a renamed file whose contents changed too used to
+  render "rename detected" under a header announcing its `+/-`, its diff hidden. `--check` cannot
+  see that: it is a rendering fault.
+- **A quoted path is C-escaped.** `core.quotepath=false` leaves non-ASCII alone, but a quote, a
+  backslash or a control character still gets the path quoted on `diff --git`, `---`/`+++`,
+  `rename from/to` *and* `--numstat`: `unquote` / `split_quoted` undo it everywhere a path is
+  read. Stripping the quotes alone left `we\"ird.txt`, a file that does not exist.
 - **A nested repository is not enumerable.** `ls-files --others` expands an untracked directory —
   except one holding its own `.git`, returned as a single entry with a trailing `/` that
   `git diff --no-index` refuses (`Could not access 'nested/null'`), silently, since `git()` is
@@ -105,7 +113,8 @@ The parts that cannot be deduced from a single file:
   server-side, answering the page nothing and writing no `TODO.md`. A findings file is external
   input on that same path — taking a finding over copies it into a comment — so `load_findings`
   passes every field through `typed()`: a type refused only later would stop the review saving at
-  all.
+  all. The range matters as much as the type: `anchorOffset` indexes the anchor window in
+  `write_todo`, and an out-of-range value was the same server-side crash on `/done`.
 - **`PROTOCOL` + `write_todo` are the executable specification of the next stage**: the instructions
   travel with the data (knowledge filed away in a skill only loads if someone invokes it). Editing
   that text means editing the instructions given to the agent that will apply the review — notably
@@ -156,7 +165,10 @@ header makes the preflight a third-party page would trigger fail — body capped
 Routes: `GET /review.html`, then `POST` on `/ping`, `/prefs`, `/regenerate`, `/comments` and
 `/done`. Three shutdown paths: *Finish review*, `SILENCE_MAX` (300 s) with no request at all, `--max-minutes`
 (60 by default). `server.json` is deleted on clean shutdown: a `server.json` with no live process is
-the record of a server that was killed, not of one that is running.
+the record of a server that was killed, not of one that is running. A live pid proves nothing
+either — the number goes to the next process to start — so `live_servers` only calls a server
+*alive* once a `POST /ping` with the recorded token answers 200, and `--stop-all` never SIGTERMs
+anything else.
 
 ## Conventions
 
