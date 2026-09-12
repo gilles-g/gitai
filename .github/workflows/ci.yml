@@ -69,6 +69,9 @@ jobs:
       - name: build the fixture repository
         run: sh .github/scripts/fixture.sh "$RUNNER_TEMP/fixture"
       - name: serve the review
+        env:
+          # prefs.json is machine-wide: the drive must not inherit one
+          XDG_CONFIG_HOME: ${{ runner.temp }}/xdg
         run: |
           python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --serve --base main \
             --out "$RUNNER_TEMP/out" --max-minutes 5 > "$RUNNER_TEMP/serve.log" 2>&1 &

@@ -17,9 +17,19 @@ const expect = (label, ok) => { console.log(`  ${ok ? '✓' : '✗'} ${label}`);
   await page.goto(url);
   await page.waitForTimeout(800);
   expect('saved on the server', (await page.locator('#state-enreg').innerText()).includes('saved on the server'));
+  // The view is a machine-wide pref (~/.config/gitai/prefs.json): a split table pairs a deleted
+  // and an added line on one row, so the row count is only comparable to the model in unified.
+  await page.click('#view-unified');
+  await page.waitForTimeout(300);
 
+  const model = JSON.parse(fs.readFileSync(path.join(out, 'diff.json'), 'utf8'));
+  const renamedModel = model.files.find((f) => f.path === 'src/Domain/Commission/New.php');
+  const renamedLines = renamedModel.hunks.reduce((n, h) => n + h.lines.length, 0);
   const renamed = page.locator('.file-diff[data-path="src/Domain/Commission/New.php"]');
-  expect('renamed+edited file renders its rows', (await renamed.locator('tr.commentable').count()) === 8);
+  expect(`renamed+edited file renders its ${renamedLines} rows`,
+    renamedLines > 0 && (await renamed.locator('tr.commentable').count()) === renamedLines);
+  expect('renamed+edited file badged from its old name',
+    (await renamed.locator('.file-diff-head .badge-outline').allInnerTexts()).join(' ') === 'renamed from Old.php');
   expect('pure rename keeps its note',
     (await page.locator('.file-diff[data-path="moved.txt"] .file-diff-body').innerText()).includes('rename detected'));
   expect('quoted names render', (await page.locator('.file-diff[data-path=\'we"ird.txt\'], .file-diff[data-path="back\\\\slash.txt"]').count()) === 2);
