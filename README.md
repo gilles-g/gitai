@@ -1,29 +1,30 @@
 # gitai
 
-Review a local git diff the way you review a pull request — one file at a time, one comment anchored
-to one line — then hand the comments back to Claude Code with the protocol to apply them.
+Review a local git diff like a pull request — click a line, leave a comment — then hand the
+review back to Claude Code with the protocol to apply it.
 
-No service, no account, no network. A single Python script, the standard library, and a page that
-opens offline.
+One Python script, standard library only. No service, no account, no network: the page opens
+offline.
 
-![A branch under review in gitai (light theme): file tree on the left, unified diff on the right, review progress and Finish review in the toolbar](docs/review-light.png)
-![The same review in gitai (dark theme)](docs/review-dark.png)
+![A branch under review: file tree on the left, unified diff on the right, review progress and Finish review in the toolbar](docs/review-light.png)
 
 ## Why
 
-A large diff is unreadable in a terminal, and there is no way to say *"this line is wrong"* other
-than retyping it into a chat. `git diff` shows you the change; it gives you nowhere to write.
+`git diff` shows the change but gives you nowhere to write. A large diff is unreadable in a
+terminal, and "this line is wrong" has to be retyped into a chat.
 
-gitai renders the diff as a page, lets you click a line to comment on it, and — when you click
-**Finish review** — writes the comments to disk next to a `TODO.md` explaining how they should be
-handled. Claude Code reads that file and applies them, with the explicit right to refuse a comment
-it believes is wrong.
+gitai renders the diff as a page, anchors each comment to a line, and on **Finish review** writes
+a `TODO.md` that Claude Code reads back. Each comment carries its kind:
 
-![Commenting on a line: the form opens right under it, and the comment is typed as one of three kinds — Must fix, Follow-up or Workflow note](docs/comment-form.png)
+| kind | what happens to it |
+|---|---|
+| **Must fix** | applied to the code |
+| **Follow-up** | reported back, nothing written |
+| **Workflow note** | recorded as a lesson about the way of working |
 
-A comment is not just a remark: its kind says what should happen to it. **Must fix** is applied to
-the code, **Follow-up** is reported back without touching anything, **Workflow note** is a lesson
-about the way of working.
+Claude keeps the explicit right to refuse a comment it believes is wrong, with its reason.
+
+![Commenting on a line: the form opens under it, with the three kinds](docs/comment-form.png)
 
 ## Install
 
@@ -34,19 +35,9 @@ As a Claude Code plugin:
 /plugin install gitai@gitai
 ```
 
-Then, in any repository:
+Then, in any repository: `/gitai:review`.
 
-```
-/gitai:review
-```
-
-Standalone, without Claude Code:
-
-```bash
-python3 scripts/gitai.py /path/to/repo --serve
-```
-
-**Requirements:** Python 3.9+ and git. No pip install, no node, no dependencies.
+Standalone: `python3 scripts/gitai.py /path/to/repo --serve`. Requires Python 3.9+ and git.
 
 ## Usage
 
@@ -70,47 +61,45 @@ Everything lands in `~/.claude/reviews/<project>/<timestamp>/`:
 | `replies/<id>.json` | one reply per comment, written when they are applied |
 | `done` | sentinel: the review is over |
 
-**gitai never writes inside your repository, and runs no git write command** — no commit, no stash,
-no `add`, not even `add -N`.
+## Guarantees
+
+- **Your repository is never written to**, and no git write command is run — not even `add -N`.
+- **No network.** CSS and JS are inlined; the page works over `file://`, where comments stay in
+  the browser and can be copied as JSON.
+- **The diff is frozen** at generation time and the page never auto-refreshes: a refresh would
+  destroy the comment you are typing. **↻** re-collects it.
+- **The server is local and locked down**: ephemeral port on `127.0.0.1`, token in a custom
+  header, `Origin` and `Host` checked, bodies capped. It stops on **Finish review**, five minutes
+  after the tab closes, or after an hour.
 
 ## What it handles
 
-Untracked files (enumerated with `ls-files --others`, because `git status --porcelain` folds an
-untracked directory into a single entry and would silently hide the files inside it). Staged
-changes (`git diff HEAD`, not `git diff`). Paths containing spaces, non-UTF-8 bytes, non-ASCII
-names. Binary files, mode changes, submodules and nested repositories degrade to an honest
-one-line notice instead of rendering empty. `\ No newline at end of file` does not shift the anchors.
+Untracked files and directories, staged changes, paths with spaces, quotes or non-UTF-8 bytes,
+renames, `\ No newline at end of file`. Binary files, mode changes, submodules and nested
+repositories degrade to a one-line notice instead of rendering empty.
 
-An anchor is not a line number but a **window**: the commented line plus or minus two lines. An
-isolated `}` occurs dozens of times in a file — searching for it alone finds the wrong one. If the
-file changed between review and application, the fingerprint says so and the anchor is searched
-again through four rungs (exact, `rstrip`, `strip`, normalised inner whitespace) rather than trusted
-blindly.
+An anchor is a **window**, not a line number: the commented line ±2. If the file changed since
+the review, the fingerprint says so and the window is searched again — exact, `rstrip`, `strip`,
+normalised whitespace — rather than trusted blindly. A comment on a deleted line cannot be
+re-anchored: the hunk travels with it.
 
-Comments on **deleted** lines are supported: there is nothing to re-anchor, so the hunk travels with
-the comment instead.
+## Development
 
-The page does not auto-refresh, by design: the diff is frozen at generation time and the only
-mutable state belongs to you — a refresh would destroy the comment you are typing. Use
-**Regenerate** to re-collect a diff that has grown.
+No build, no dependency. `--check` compares the parsed `+/-` against `git diff --numstat`.
+CI (`.github/workflows/ci.yml`) builds a fixture repository holding every shape that once broke
+the parser, runs `--check` on Python 3.9 and 3.13, verifies the assets, and drives the served
+page in Chromium through Finish review.
 
-The local server is bound to an ephemeral port on `127.0.0.1`, requires a token in a custom header
-(so a third-party page triggers a preflight it cannot pass), checks `Origin` **and** `Host` (DNS
-rebinding), and caps request bodies. It shuts itself down when you click Finish review, five minutes
-after the tab closes, or after an hour — whichever comes first.
+```bash
+sh .github/scripts/fixture.sh /tmp/fx
+python3 scripts/gitai.py /tmp/fx/repo --check --base main
+```
 
 ## Not affiliated with GitHub
 
-**gitai is not affiliated with, endorsed by, or sponsored by GitHub, Inc.** GitHub, the GitHub logo
-and the Octocat are trademarks of GitHub, Inc.
-
-The visual design deliberately resembles a GitHub pull request because that is the interface
-reviewers already know. It is a hand-written approximation inspired by
-[Primer](https://primer.style), GitHub's design system, which is published under the MIT licence.
-No GitHub trademark, logo or brand asset is bundled.
-
-`assets/primer-like.css`, `assets/review.css` and `assets/render.js` are hand-written; `render.js`
-is a small dependency-free syntax highlighter, not a fork of an existing library.
+gitai is not affiliated with, endorsed by, or sponsored by GitHub, Inc. The page resembles a
+pull request because that is the interface reviewers already know: a hand-written approximation
+inspired by [Primer](https://primer.style) (MIT), bundling no GitHub trademark, logo or asset.
 
 ## Licence
 
