@@ -27,7 +27,18 @@ checked with `diff`: a single line must come out.
 
 ## Commands
 
-No build, no test suite, no configured linter. Python 3.9+ and git.
+No build, no configured linter. Python 3.9+ and git. The test suite is the GitHub Actions
+workflow (`.github/workflows/ci.yml`), which replays by machine what this file asks for by hand:
+`.github/scripts/fixture.sh` builds the booby-trapped repository (untracked files and directory,
+nested repository, submodule bump, binary, mode alone and mode + content, path with a space,
+latin-1, `\ No newline`, pure rename, rename + edit, names git quotes C-style) and `--check` runs
+against it in both modes on Python 3.9 and 3.13; `check_assets.py` verifies what neither
+`py_compile` nor `--check` sees — the three theme blocks declare the same tokens, the dark block
+`auto_dark_block` looks for exists, `render.js` and the `JS` string parse under `node --check`,
+the two manifests agree on the version; `drive.cjs` drives the served page in Chromium (comment
+on a new line, a deleted line and globally, split view, *Finish review*, `TODO.md` written, server
+gone). Locally: `sh .github/scripts/fixture.sh /tmp/fx` then the commands below on `/tmp/fx/repo`;
+the drive needs `playwright` on `NODE_PATH`.
 
 ```bash
 python3 scripts/gitai.py <repo> --check        # the only test: parser vs git diff --numstat

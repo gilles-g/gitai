@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: parser & render (python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: compile
+        run: python3 -m py_compile scripts/gitai.py
+      - name: build the fixture repository
+        run: sh .github/scripts/fixture.sh "$RUNNER_TEMP/fixture"
+      - name: snapshot the fixture's git state
+        run: git -C "$RUNNER_TEMP/fixture/repo" status --porcelain -z | sha256sum > "$RUNNER_TEMP/before"
+      - name: --check, working tree
+        run: python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --check
+      - name: --check, --base main
+        run: python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --check --base main
+      - name: --dump-json is valid JSON
+        run: python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --dump-json --base main | python3 -m json.tool > /dev/null
+      - name: static render
+        run: |
+          python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --base main --out "$RUNNER_TEMP/static"
+          test -s "$RUNNER_TEMP/static/review.html"
+          test -s "$RUNNER_TEMP/static/diff.json"
+          # inlined, never linked: the page must open over file://
+          ! grep -Eq '<link[^>]+href=|<script[^>]+src=' "$RUNNER_TEMP/static/review.html"
+      - name: the reviewed repository is left untouched
+        run: |
+          cd "$RUNNER_TEMP/fixture/repo"
+          git status --porcelain -z | sha256sum | diff - "$RUNNER_TEMP/before"
+          test ! -e review.html && test ! -e diff.json && test ! -e comments.json
+
+  assets:
+    name: assets & manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: python3 .github/scripts/check_assets.py
+
+  page:
+    name: page driven in Chromium
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: install playwright
+        run: |
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: build the fixture repository
+        run: sh .github/scripts/fixture.sh "$RUNNER_TEMP/fixture"
+      - name: serve the review
+        run: |
+          python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --serve --base main \
+            --out "$RUNNER_TEMP/out" --max-minutes 5 > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for i in $(seq 1 50); do grep -q '^http' "$RUNNER_TEMP/serve.log" && break; sleep 0.2; done
+          cat "$RUNNER_TEMP/serve.log"
+          grep '^http' "$RUNNER_TEMP/serve.log" > "$RUNNER_TEMP/url"
+      - name: drive the page
+        run: node .github/scripts/drive.cjs "$(cat "$RUNNER_TEMP/url")" "$RUNNER_TEMP/out"
+      - name: server log
+        if: always()
+        run: cat "$RUNNER_TEMP/serve.log"
