@@ -189,10 +189,68 @@ body {
   background: var(--border-muted);
 }
 
+.tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  background: var(--canvas-subtle);
+  border-bottom: 1px solid var(--border-default);
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--fg-default);
+}
+.tab[aria-selected='true'] {
+  color: var(--fg-default);
+  font-weight: 600;
+  border-bottom-color: var(--accent-emphasis);
+}
+.tab-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--neutral-muted);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--fg-muted);
+}
+body.on-conversation .progress,
+body.on-conversation .seg {
+  display: none;
+}
+
 .app-body {
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
+}
+
+.pane-conversation {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.conversation {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+.conversation-empty {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 13px;
 }
 
 .sidebar {
@@ -209,8 +267,7 @@ body {
   width: 44px;
 }
 .sidebar.collapsed .sidebar-search,
-.sidebar.collapsed .tree,
-.sidebar.collapsed .tracker {
+.sidebar.collapsed .tree {
   display: none;
 }
 .sidebar-top {
@@ -396,10 +453,10 @@ body {
 }
 
 .tracker {
-  flex: 0 0 auto;
-  max-height: 38%;
-  overflow: auto;
-  border-top: 1px solid var(--border-default);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--canvas-default);
 }
 .tracker-head {
   display: flex;

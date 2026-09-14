@@ -664,6 +664,17 @@ JS = r"""
     sauvePrefs();
   }
 
+  var onglet = 'files';
+  function poseOnglet(nom) {
+    onglet = nom;
+    var conv = nom === 'conversation';
+    $('pane-conversation').hidden = !conv;
+    $('pane-files').hidden = conv;
+    $('tab-conversation').setAttribute('aria-selected', String(conv));
+    $('tab-files').setAttribute('aria-selected', String(!conv));
+    document.body.classList.toggle('on-conversation', conv);
+  }
+
   function coloriser(section) {
     if (section.dataset.colorise || !section.dataset.language || !window.Render) return;
     section.dataset.colorise = '1';
@@ -842,6 +853,9 @@ JS = r"""
     $('ct-open').textContent = compte.open + ' open';
     $('ct-replied').textContent = compte.replied + ' replied';
     $('ct-done').textContent = compte.done + ' done';
+    $('conversation-empty').hidden = state.comments.length > 0;
+    $('tab-count').hidden = state.comments.length === 0;
+    $('tab-count').textContent = compte.open + ' open';
   }
 
   function majProgres() {
@@ -1128,8 +1142,13 @@ JS = r"""
 
     var vers = e.target.closest('[data-goto]');
     if (vers) {
+      poseOnglet('files');
       var fil = $('thread-' + vers.dataset.goto);
-      if (fil) fil.scrollIntoView({ block: 'center' });
+      if (fil) {
+        var sec = fil.closest('.file-diff');
+        if (sec) { sec.classList.remove('collapsed'); preparer(sec) }
+        fil.scrollIntoView({ block: 'center' });
+      }
       return;
     }
 
@@ -1204,6 +1223,8 @@ JS = r"""
   $('view-split').addEventListener('click', function () { poseVue('split') });
   $('view-unified').addEventListener('click', function () { poseVue('unified') });
   $('sidebar-toggle').addEventListener('click', function () { poseSidebar(!prefs.collapsed) });
+  $('tab-conversation').addEventListener('click', function () { poseOnglet('conversation') });
+  $('tab-files').addEventListener('click', function () { poseOnglet('files') });
   $('filter').addEventListener('input', function (e) { filtrer(e.target.value) });
 
   (function resize() {
@@ -1233,7 +1254,7 @@ JS = r"""
       if (champ && e.target.id === 'filter') { e.target.value = ''; filtrer(''); e.target.blur() }
       return;
     }
-    if (champ || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (champ || e.metaKey || e.ctrlKey || e.altKey || onglet !== 'files') return;
     if (e.key === '/') { e.preventDefault(); $('filter').focus(); return }
     if (e.key === 'j' || e.key === 'k') {
       var sections = Array.prototype.slice.call(document.querySelectorAll('.file-diff'));
@@ -1291,6 +1312,7 @@ JS = r"""
   poseWrap(prefs.wrap);
   poseTab(prefs.tab);
   poseSidebar(prefs.collapsed);
+  poseOnglet('files');
   $('view-split').setAttribute('aria-pressed', String(prefs.view === 'split'));
   $('view-unified').setAttribute('aria-pressed', String(prefs.view === 'unified'));
 
@@ -1655,6 +1677,19 @@ def render_toolbar(model):
     )
 
 
+def render_tabs(model):
+    return (
+        '<nav class="tabs" role="tablist">'
+        '<button class="tab" id="tab-conversation" role="tab" aria-selected="false"'
+        ' aria-controls="pane-conversation">Conversation'
+        '<span class="tab-count" id="tab-count" hidden></span></button>'
+        '<button class="tab" id="tab-files" role="tab" aria-selected="true"'
+        ' aria-controls="pane-files">Files changed'
+        f'<span class="tab-count">{fmt_num(model["totals"]["files"])}</span></button>'
+        '</nav>'
+    )
+
+
 def render(model, comments, findings, replies, token):
     body, restant = [], GLOBAL_CAP
     for f in model["files"]:
@@ -1683,13 +1718,22 @@ def render(model, comments, findings, replies, token):
         ' aria-label="filter files"><kbd>/</kbd></span>'
         '</div>'
         + render_tree(model)
-        + '<div class="tracker" id="tracker" hidden>'
+        + '</aside>'
+    )
+
+    conversation = (
+        '<section class="pane-conversation" id="pane-conversation" role="tabpanel"'
+        ' aria-labelledby="tab-conversation" hidden>'
+        '<div class="conversation">'
+        '<p class="conversation-empty" id="conversation-empty">No comment yet — comment on a '
+        'line from the <b>Files changed</b> tab.</p>'
+        '<div class="tracker" id="tracker" hidden>'
         '<div class="tracker-head">Comments<span class="tracker-counts">'
         '<span class="ct-open" id="ct-open">0 open</span>'
         '<span class="ct-replied" id="ct-replied">0 replied</span>'
         '<span class="ct-done" id="ct-done">0 done</span></span></div>'
         '<div id="tracker-list"></div></div>'
-        '</aside>'
+        '</div></section>'
     )
 
     pied = (
@@ -1722,7 +1766,10 @@ def render(model, comments, findings, replies, token):
         'if(p&&p.theme&&p.theme!=="auto")document.documentElement.setAttribute("data-theme",p.theme);'
         'if(p&&p.wrap)document.body.classList.add("soft-wrap")}catch(e){}</script>'
         + render_toolbar(model)
-        + '<div class="app-body">'
+        + render_tabs(model)
+        + conversation
+        + '<div class="app-body" id="pane-files" role="tabpanel"'
+          ' aria-labelledby="tab-files">'
         + sidebar
         + '<div class="resizer" id="resizer"></div>'
         + '<main class="main" id="main"><div class="main-content">'
