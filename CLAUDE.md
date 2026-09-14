@@ -223,9 +223,17 @@ anything else.
 ## Still undecided
 
 `claude plugin validate --strict` passes: MIT `LICENSE`, `author` in `plugin.json` (name + GitHub
-URL, no email), and the two version fields aligned on `0.3.0` — `plugin.json` wins at install time,
-the `marketplace.json` entry is only read for display. The install snippet points at
-`gilles-g/gitai`, the repository's own remote.
+URL, no email), and the two version fields aligned on `0.3.0` — `plugin.json` wins at install time.
+The install snippet points at `gilles-g/gitai`, the repository's own remote.
+
+**The `marketplace.json` entry is no longer read for display alone.** Its `source` is pinned
+(`source: github`, `repo`, `ref: v<version>`) instead of the `./` that served whatever sat on the
+default branch: people install this now, and a broken commit on `main` used to reach them within
+the second, with no release to roll back to. Consequence — **`ref` is a dangling pointer until the
+tag is pushed**: bumping the version means bumping `ref` *and* pushing the annotated tag it names,
+in that order. A `marketplace.json` on `main` naming a tag that does not exist on the remote
+breaks every installation, and `check_assets.py` does not see it — it only compares the two
+version fields to each other.
 
 What remains open: the plugin has never been published, so everything but `README.md` is still
 untracked, and whether `CLAUDE.md` itself belongs in the published tree is the developer's call.
