@@ -12,7 +12,7 @@
       "name": "gitai",
       "source": "./",
       "description": "Review a local git diff in a pull-request-style page, comment on lines, and hand the comments back to Claude with the protocol to apply them.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "category": "workflow",
       "keywords": ["review", "diff", "git", "pull-request", "code-review"]
     }
