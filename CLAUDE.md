@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Claude Code plugin (`.claude-plugin/plugin.json` + `skills/review/SKILL.md`, invoked as
-`/gitai:review`) whose entire product is **one standard-library Python script**: `scripts/gitai.py`.
+`/localpr:review`) whose entire product is **one standard-library Python script**: `scripts/localpr.py`.
 It renders a git diff as a GitHub pull-request-style page, collects comments anchored to single
 lines through a locked-down local server, then writes a `TODO.md` that Claude reads back to apply
 the review.
@@ -20,8 +20,8 @@ Non-negotiable constraints — they shape every change:
 
 ### Two copies of the script
 
-`scripts/gitai.py` (the publishable plugin) and the developer's local copy under
-`~/.claude/tools/gitai/gitai.py` differ **by the `ASSETS` line alone**: `parent.parent / "assets"`
+`scripts/localpr.py` (the publishable plugin) and the developer's local copy under
+`~/.claude/tools/localpr/localpr.py` differ **by the `ASSETS` line alone**: `parent.parent / "assets"`
 in the plugin, `parent / "assets"` locally. A change to one is resynchronised into the other, and
 checked with `diff`: a single line must come out.
 
@@ -41,12 +41,12 @@ gone). Locally: `sh .github/scripts/fixture.sh /tmp/fx` then the commands below 
 the drive needs `playwright` on `NODE_PATH`.
 
 ```bash
-python3 scripts/gitai.py <repo> --check        # the only test: parser vs git diff --numstat
-python3 scripts/gitai.py <repo> --dump-json    # the model, the contract every other stage consumes
-python3 scripts/gitai.py <repo>                # static page, prints a file:// URL
-python3 scripts/gitai.py <repo> --serve        # serve the page and collect comments
-python3 scripts/gitai.py <repo> --base develop # review a whole branch, not just the working tree
-python3 scripts/gitai.py --list --stop-all     # review servers still alive
+python3 scripts/localpr.py <repo> --check        # the only test: parser vs git diff --numstat
+python3 scripts/localpr.py <repo> --dump-json    # the model, the contract every other stage consumes
+python3 scripts/localpr.py <repo>                # static page, prints a file:// URL
+python3 scripts/localpr.py <repo> --serve        # serve the page and collect comments
+python3 scripts/localpr.py <repo> --base develop # review a whole branch, not just the working tree
+python3 scripts/localpr.py --list --stop-all     # review servers still alive
 ```
 
 `--check` stands in for a test suite: it compares the parsed `+/-` against `git diff --numstat` and
@@ -69,8 +69,8 @@ A change is validated by **executing** the whole chain — static render, then t
 driven (form opened, comment submitted, thread displayed).
 
 The plugin is installed locally from a *directory* marketplace (`claude plugin marketplace add <this
-directory>`, then `claude plugin install gitai@gitai`). The marketplace points at this tree, but
-installing **copies the plugin** into `~/.claude/plugins/cache/gitai/gitai/<version>/`, and that
+directory>`, then `claude plugin install localpr@localpr`). The marketplace points at this tree, but
+installing **copies the plugin** into `~/.claude/plugins/cache/localpr/localpr/<version>/`, and that
 cache is keyed by the version in `plugin.json`: `claude plugin marketplace update` does not refresh
 it, and `claude plugin update` short-circuits on an unchanged version. So an edit made here does not
 reach the installed plugin. To test the working tree, run `claude --plugin-dir <this directory>`; to
@@ -112,7 +112,7 @@ The parts that cannot be deduced from a single file:
   containing `diff --git` therefore cannot break a record. A record with no hunk (binary, mode only,
   pure rename, submodule) is opened by `finalise()`, without which it silently vanishes from the
   review.
-- **`diff.json` is the contract** (`MODEL_VERSION`): the source of truth for anchors. `window.GITAI`
+- **`diff.json` is the contract** (`MODEL_VERSION`): the source of truth for anchors. `window.LOCALPR`
   carries only an extract of it (path + fingerprint per file, plus comments/findings/replies/token).
 - **An anchor is a window, not a line number**: the commented line ±2, with `anchorOffset`. The
   `fingerprint` (truncated sha256 of the file) says whether line numbers are still trustworthy.
@@ -170,7 +170,7 @@ They are stated in the module docstring, and read like bugs to anyone who does n
 
 ### Local server
 
-Ephemeral port on `127.0.0.1`, mandatory token (`?t=` query on GET, `X-Gitai-Token` header on POST),
+Ephemeral port on `127.0.0.1`, mandatory token (`?t=` query on GET, `X-Localpr-Token` header on POST),
 `Host` **and** `Origin` checked (DNS rebinding), `OPTIONS` always answers 403 — the absence of a CORS
 header makes the preflight a third-party page would trigger fail — body capped at `MAX_PAYLOAD`.
 Routes: `GET /review.html`, then `POST` on `/ping`, `/prefs`, `/regenerate`, `/comments` and
@@ -207,24 +207,24 @@ anything else.
 - The HTML is assembled by concatenating f-strings; everything coming from the data goes through
   `esc()`.
 - Threads, the comment form, the file tree's search and the comment tracker are rendered
-  **client-side** (`JS`, a string inside `gitai.py`). Do not mirror their labels on the Python
+  **client-side** (`JS`, a string inside `localpr.py`). Do not mirror their labels on the Python
   side: an earlier `SEV` / `TYPE_LABEL` pair sat there dead, and diverged.
 - **What the reviewer chose is not part of the contract**, and never goes into `comments.json` —
   the agent that applies the review has no use for it. But it is *global to the machine*: theme,
-  unified/split, soft wrap, tab size and sidebar width go to `~/.config/gitai/prefs.json`
+  unified/split, soft wrap, tab size and sidebar width go to `~/.config/localpr/prefs.json`
   (`XDG_CONFIG_HOME` honoured) through `POST /prefs`, **merged** into the file and filtered by
   `sanitize_prefs` — the same trust boundary as `sanitize_state`, with the same trap: a key
-  missing from it is silently dropped. `render` inlines that file into `window.GITAI_PREFS`, read
+  missing from it is silently dropped. `render` inlines that file into `window.LOCALPR_PREFS`, read
   by a script placed before the first paint so the theme does not flash. `localStorage`
-  (`gitai:prefs`) is kept as a mirror, and the newest of the two stores wins on an `at` stamp: a
+  (`localpr:prefs`) is kept as a mirror, and the newest of the two stores wins on an `at` stamp: a
   page opened with no server can only write localStorage. The files ticked *viewed*
-  (`gitai:viewed:<repo>:<base>`) stay per-browser.
+  (`localpr:viewed:<repo>:<base>`) stay per-browser.
 
 ## Still undecided
 
 `claude plugin validate --strict` passes: MIT `LICENSE`, `author` in `plugin.json` (name + GitHub
 URL, no email), and the two version fields aligned on `0.3.0` — `plugin.json` wins at install time.
-The install snippet points at `gilles-g/gitai`, the repository's own remote.
+The install snippet points at `gilles-g/localpr`, the repository's own remote.
 
 **The `marketplace.json` entry is no longer read for display alone.** Its `source` is pinned
 (`source: github`, `repo`, `ref: v<version>`) instead of the `./` that served whatever sat on the

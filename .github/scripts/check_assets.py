@@ -4,7 +4,7 @@
 - the three theme blocks of primer-like.css declare the same tokens (a colour added to one
   block alone silently falls back to the light value on the other two);
 - the dark block auto_dark_block re-extracts still exists under the exact selector it looks for;
-- render.js and the JS string inside gitai.py parse (node --check): a syntax error there
+- render.js and the JS string inside localpr.py parse (node --check): a syntax error there
   renders a page with no comment form and no error visible server-side;
 - the two manifests are valid JSON and agree on the version, the one the plugin cache is keyed by.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-import gitai  # noqa: E402
+import localpr  # noqa: E402
 
 failures = []
 
@@ -39,14 +39,14 @@ if not failures:
     for theme, tokens in blocks.items():
         for token in sorted(every - tokens):
             fail(f"primer-like.css: {token} missing from the {theme} block")
-if not gitai.auto_dark_block(css):
+if not localpr.auto_dark_block(css):
     fail("primer-like.css: auto_dark_block found no \":root[data-theme='dark'] {\" block")
 
 with tempfile.TemporaryDirectory() as tmp:
     embedded = Path(tmp) / "embedded.js"
-    embedded.write_text(gitai.JS, encoding="utf-8")
+    embedded.write_text(localpr.JS, encoding="utf-8")
     for label, path in (("assets/render.js", ROOT / "assets" / "render.js"),
-                        ("gitai.py JS string", embedded)):
+                        ("localpr.py JS string", embedded)):
         r = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
         if r.returncode != 0:
             fail(f"{label} does not parse:\n{r.stderr.strip()}")

@@ -1,14 +1,14 @@
 ---
-description: Open a local pull-request-style page to review the current git diff. Use when the developer wants to read a diff as a PR, comment on specific lines, or hand a review back to Claude. Triggers: "/gitai:review", "review this diff", "open the review page", "let me comment on these changes".
+description: Open a local pull-request-style page to review the current git diff. Use when the developer wants to read a diff as a PR, comment on specific lines, or hand a review back to Claude. Triggers: "/localpr:review", "review this diff", "open the review page", "let me comment on these changes".
 argument-hint: "[repo path | nothing = current repo] [--base <ref>]"
 disable-model-invocation: true
 ---
 
-Launch the gitai review page on the target repository — `$ARGUMENTS` if given, otherwise the
+Launch the localpr review page on the target repository — `$ARGUMENTS` if given, otherwise the
 current repository — then hand control straight back.
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/gitai.py" <repo> --serve
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/localpr.py" <repo> --serve
 ```
 
 The process holds the terminal: run it **in the background**, wait for the URL to be printed, then
@@ -45,5 +45,5 @@ Options worth knowing, to be passed only when the request calls for them:
 Before running against an unfamiliar repository, `--check` costs two seconds and avoids reviewing a
 wrong diff.
 
-gitai runs **no** git write command, and never writes inside the repository: every artefact goes to
+localpr runs **no** git write command, and never writes inside the repository: every artefact goes to
 its output directory.

@@ -19,20 +19,20 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: compile
-        run: python3 -m py_compile scripts/gitai.py
+        run: python3 -m py_compile scripts/localpr.py
       - name: build the fixture repository
         run: sh .github/scripts/fixture.sh "$RUNNER_TEMP/fixture"
       - name: snapshot the fixture's git state
         run: git -C "$RUNNER_TEMP/fixture/repo" status --porcelain -z | sha256sum > "$RUNNER_TEMP/before"
       - name: --check, working tree
-        run: python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --check
+        run: python3 scripts/localpr.py "$RUNNER_TEMP/fixture/repo" --check
       - name: --check, --base main
-        run: python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --check --base main
+        run: python3 scripts/localpr.py "$RUNNER_TEMP/fixture/repo" --check --base main
       - name: --dump-json is valid JSON
-        run: python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --dump-json --base main | python3 -m json.tool > /dev/null
+        run: python3 scripts/localpr.py "$RUNNER_TEMP/fixture/repo" --dump-json --base main | python3 -m json.tool > /dev/null
       - name: static render
         run: |
-          python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --base main --out "$RUNNER_TEMP/static"
+          python3 scripts/localpr.py "$RUNNER_TEMP/fixture/repo" --base main --out "$RUNNER_TEMP/static"
           test -s "$RUNNER_TEMP/static/review.html"
           test -s "$RUNNER_TEMP/static/diff.json"
           # inlined, never linked: the page must open over file://
@@ -73,7 +73,7 @@ jobs:
           # prefs.json is machine-wide: the drive must not inherit one
           XDG_CONFIG_HOME: ${{ runner.temp }}/xdg
         run: |
-          python3 scripts/gitai.py "$RUNNER_TEMP/fixture/repo" --serve --base main \
+          python3 scripts/localpr.py "$RUNNER_TEMP/fixture/repo" --serve --base main \
             --out "$RUNNER_TEMP/out" --max-minutes 5 > "$RUNNER_TEMP/serve.log" 2>&1 &
           for i in $(seq 1 50); do grep -q '^http' "$RUNNER_TEMP/serve.log" && break; sleep 0.2; done
           cat "$RUNNER_TEMP/serve.log"

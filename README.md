@@ -1,4 +1,4 @@
-# gitai
+# localpr
 
 Review a local git diff like a pull request — click a line, leave a comment — then hand the
 review back to Claude Code with the protocol to apply it.
@@ -13,7 +13,7 @@ offline.
 `git diff` shows the change but gives you nowhere to write. A large diff is unreadable in a
 terminal, and "this line is wrong" has to be retyped into a chat.
 
-gitai renders the diff as a page, anchors each comment to a line, and on **Finish review** writes
+localpr renders the diff as a page, anchors each comment to a line, and on **Finish review** writes
 a `TODO.md` that Claude Code reads back. Each comment carries its kind:
 
 | kind | what happens to it |
@@ -31,23 +31,23 @@ Claude keeps the explicit right to refuse a comment it believes is wrong, with i
 As a Claude Code plugin:
 
 ```
-/plugin marketplace add gilles-g/gitai
-/plugin install gitai@gitai
+/plugin marketplace add gilles-g/localpr
+/plugin install localpr@localpr
 ```
 
-Then, in any repository: `/gitai:review`.
+Then, in any repository: `/localpr:review`.
 
-Standalone: `python3 scripts/gitai.py /path/to/repo --serve`. Requires Python 3.9+ and git.
+Standalone: `python3 scripts/localpr.py /path/to/repo --serve`. Requires Python 3.9+ and git.
 
 ## Usage
 
 ```bash
-python3 scripts/gitai.py <repo>                 # static page, prints a file:// URL
-python3 scripts/gitai.py <repo> --serve         # serve the page and collect comments
-python3 scripts/gitai.py <repo> --base develop  # review a whole branch, not just the working tree
-python3 scripts/gitai.py <repo> --check         # verify the parser against git diff --numstat
-python3 scripts/gitai.py --list                 # review servers still alive
-python3 scripts/gitai.py --stop-all             # stop them
+python3 scripts/localpr.py <repo>                 # static page, prints a file:// URL
+python3 scripts/localpr.py <repo> --serve         # serve the page and collect comments
+python3 scripts/localpr.py <repo> --base develop  # review a whole branch, not just the working tree
+python3 scripts/localpr.py <repo> --check         # verify the parser against git diff --numstat
+python3 scripts/localpr.py --list                 # review servers still alive
+python3 scripts/localpr.py --stop-all             # stop them
 ```
 
 Everything lands in `~/.claude/reviews/<project>/<timestamp>/`:
@@ -92,12 +92,12 @@ page in Chromium through Finish review.
 
 ```bash
 sh .github/scripts/fixture.sh /tmp/fx
-python3 scripts/gitai.py /tmp/fx/repo --check --base main
+python3 scripts/localpr.py /tmp/fx/repo --check --base main
 ```
 
 ## Not affiliated with GitHub
 
-gitai is not affiliated with, endorsed by, or sponsored by GitHub, Inc. The page resembles a
+localpr is not affiliated with, endorsed by, or sponsored by GitHub, Inc. The page resembles a
 pull request because that is the interface reviewers already know: a hand-written approximation
 inspired by [Primer](https://primer.style) (MIT), bundling no GitHub trademark, logo or asset.
 

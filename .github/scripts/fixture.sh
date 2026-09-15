@@ -5,7 +5,7 @@ set -eu
 root="$1"
 rm -rf "$root" && mkdir -p "$root" && cd "$root"
 git init -q -b main repo && cd repo
-git config user.email ci@gitai && git config user.name gitai-ci
+git config user.email ci@localpr && git config user.name localpr-ci
 git config commit.gpgsign false
 
 mkdir -p src/Domain/Commission sub
@@ -21,7 +21,7 @@ printf '#!/bin/sh\necho hi\n' > script.sh
 printf 'm\n' > modeonly.txt
 git add -A && git commit -qm init
 # a nested repository committed as a gitlink, bumped later
-git -C sub init -q -b main && git -C sub -c user.email=ci@gitai -c user.name=gitai-ci \
+git -C sub init -q -b main && git -C sub -c user.email=ci@localpr -c user.name=localpr-ci \
     commit -q --allow-empty -m s
 git add sub 2>/dev/null && git commit -qm gitlink
 
@@ -38,7 +38,7 @@ printf '\351t\351 latin\nplus\n' > latin.txt
 printf 'BIN\000\001\002new\n' > bin.dat
 chmod +x script.sh && printf '#!/bin/sh\necho hi\necho bye\n' > script.sh   # mode + content
 chmod +x modeonly.txt                             # mode alone
-git -C sub -c user.email=ci@gitai -c user.name=gitai-ci commit -q --allow-empty -m s2
+git -C sub -c user.email=ci@localpr -c user.name=localpr-ci commit -q --allow-empty -m s2
 printf 'new\nfile\n' > untracked.py
 mkdir -p newdir/deep && printf 'k: v\n' > newdir/deep/c.yml
 mkdir nested && git -C nested init -q && printf 'z\n' > nested/z.txt

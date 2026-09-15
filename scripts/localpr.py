@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""gitai - GitHub-style pull request review of a local diff, in one self-contained page.
+"""localpr - GitHub-style pull request review of a local diff, in one self-contained page.
 
-    python3 gitai.py <repo>                    # static render, prints file://.../review.html
-    python3 gitai.py <repo> --serve            # serve the page and collect comments
-    python3 gitai.py <repo> --dump-json        # the data model, the contract other stages consume
-    python3 gitai.py <repo> --check            # parser integrity against git diff --numstat
+    python3 localpr.py <repo>                    # static render, prints file://.../review.html
+    python3 localpr.py <repo> --serve            # serve the page and collect comments
+    python3 localpr.py <repo> --dump-json        # the data model, the contract other stages consume
+    python3 localpr.py <repo> --check            # parser integrity against git diff --numstat
 
 Outputs, under --out (default ~/.claude/reviews/<project>/<timestamp>/):
     diff.json           model snapshot - the source of truth for comment anchors
@@ -16,7 +16,7 @@ Outputs, under --out (default ~/.claude/reviews/<project>/<timestamp>/):
     TODO.md             the comments grouped by file, plus how to handle them
     done                sentinel meaning the review is over
 
-The reviewer's display preferences (theme, layout, sidebar) go to ~/.config/gitai/prefs.json,
+The reviewer's display preferences (theme, layout, sidebar) go to ~/.config/localpr/prefs.json,
 global to the machine and the only thing written outside --out: localStorage cannot hold them,
 the served page changes origin with every ephemeral port.
 
@@ -591,15 +591,18 @@ def read_asset(nom):
 
 JS = r"""
 (function () {
-  var D = window.GITAI;
-  var CLE = 'gitai:' + D.repo + ':' + D.base;
-  var CLE_VUS = 'gitai:viewed:' + D.repo + ':' + D.base;
-  var CLE_PREFS = 'gitai:prefs';
+  var D = window.LOCALPR;
+  var CLE = 'localpr:' + D.repo + ':' + D.base;
+  var CLE_VUS = 'localpr:viewed:' + D.repo + ':' + D.base;
+  var CLE_PREFS = 'localpr:prefs';
   var server = false, state = null, seq = 0;
   var SEVS = { fix: 'blocking', followUp: 'nitpick', workflowNote: 'question' };
   var LIBS = { fix: 'Must fix', followUp: 'Follow-up', workflowNote: 'Workflow note' };
 
   function maintenant() { return new Date().toISOString() }
+  /* The server stamps its local offset, the page stamps UTC: compared as strings, a comment
+     saved at 20:30Z looks older than a 22:18+02:00 state and the stale one wins. */
+  function instant(s) { var t = Date.parse(s || ''); return isNaN(t) ? 0 : t }
   function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML }
   function $(id) { return document.getElementById(id) }
   function lireJson(cle, defaut) {
@@ -609,7 +612,7 @@ JS = r"""
     try { localStorage.setItem(cle, JSON.stringify(valeur)) } catch (e) {}
   }
 
-  var prefs = window.GITAI_PREFS || {};
+  var prefs = window.LOCALPR_PREFS || {};
   if (!prefs.view) prefs.view = 'unified';
   if (!prefs.theme) prefs.theme = 'auto';
   if (!prefs.tab) prefs.tab = 4;
@@ -1039,7 +1042,7 @@ JS = r"""
   function post(route, body) {
     return fetch(route, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Gitai-Token': D.token || '' },
+      headers: { 'Content-Type': 'application/json', 'X-Localpr-Token': D.token || '' },
       body: JSON.stringify(body || {})
     }).then(function (r) { if (!r.ok) throw new Error(r.status); return r });
   }
@@ -1104,6 +1107,28 @@ JS = r"""
     });
     $('tree-empty').hidden = visibles > 0;
   }
+
+  var boutonAjout = document.createElement('button');
+  boutonAjout.type = 'button';
+  boutonAjout.className = 'add-comment-btn';
+  boutonAjout.textContent = '+';
+  boutonAjout.title = 'Add a comment on this line';
+
+  document.addEventListener('mouseover', function (e) {
+    var cellule = e.target.closest('.line-num[data-line]');
+    if (!cellule) {
+      var code = e.target.closest('.line-code[data-line]');
+      if (code) {
+        cellule = code.parentNode.querySelector('.line-num[data-side="' + code.dataset.side +
+                                                '"][data-line="' + code.dataset.line + '"]');
+      }
+    }
+    if (cellule) {
+      if (boutonAjout.parentNode !== cellule) cellule.appendChild(boutonAjout);
+    } else if (boutonAjout.parentNode) {
+      boutonAjout.remove();
+    }
+  });
 
   document.addEventListener('click', function (e) {
     var menu = $('settings-menu');
@@ -1186,9 +1211,8 @@ JS = r"""
 
     if (e.target.closest('.thread') || e.target.closest('.form-row-inline')) return;
 
-    var cellule = e.target.closest('.line-code[data-line],.line-num[data-line]');
-    if (cellule) {
-      if (String(window.getSelection())) return;
+    if (e.target === boutonAjout) {
+      var cellule = boutonAjout.parentNode;
       var section = cellule.closest('.file-diff');
       var side = cellule.dataset.side, line = cellule.dataset.line;
       openForm(cellule.parentNode, true, function (t, body) {
@@ -1306,7 +1330,7 @@ JS = r"""
   state = D.comments && D.comments.comments
     ? D.comments : { version: 1, updated: null, n: 0, comments: [] };
   var local = lireJson(CLE, null);
-  if (local && local.comments && (!state.updated || (local.updated || '') > state.updated)) state = local;
+  if (local && local.comments && instant(local.updated) > instant(state.updated)) state = local;
 
   poseTheme(prefs.theme);
   poseWrap(prefs.wrap);
@@ -1353,7 +1377,7 @@ JS = r"""
     setInterval(heartbeat, 30000);
     setStatus('saved on the server', 'praise');
     $('fallback').hidden = true;
-    if (state.updated && (!D.comments || state.updated > (D.comments.updated || ''))) enregistrer();
+    if (state.updated && instant(state.updated) > instant(D.comments && D.comments.updated)) enregistrer();
   }).catch(function () {
     switchToFallback(D.token ? 'server unreachable - comments kept locally'
                              : 'page opened without a server - comments kept locally');
@@ -1639,7 +1663,7 @@ def render_toolbar(model):
     base = esc(model["base"]) + (f' · {esc(model["head"])}' if model["head"] else "")
     return (
         '<header class="toolbar">'
-        '<span class="toolbar-brand">gitai</span>'
+        '<span class="toolbar-brand">localpr</span>'
         f'<span class="toolbar-project">{esc(model["project"])}</span>'
         f'<span class="chip">{ICON_BRANCH}{base}</span>'
         f'<span class="toolbar-stat">{fmt_num(t["files"])} file(s) changed '
@@ -1754,15 +1778,15 @@ def render(model, comments, findings, replies, token):
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<title>{esc(model["project"])} - gitai review</title>'
+        f'<title>{esc(model["project"])} - localpr review</title>'
         f"<style>{style}</style></head><body>"
-        # Before the first paint and before window.GITAI, or the theme flashes. The newest of
+        # Before the first paint and before window.LOCALPR, or the theme flashes. The newest of
         # the two stores wins: a page opened without a server can only write localStorage.
-        + '<script>window.GITAI_PREFS='
+        + '<script>window.LOCALPR_PREFS='
         + (json.dumps(prefs, ensure_ascii=False).replace("</", "<\\/") if prefs
            else "null") + ';try{'
-        'var l=JSON.parse(localStorage.getItem("gitai:prefs")||"null"),f=window.GITAI_PREFS;'
-        'var p=(!f||(l&&(l.at||"")>(f.at||"")))?l:f;window.GITAI_PREFS=p||null;'
+        'var l=JSON.parse(localStorage.getItem("localpr:prefs")||"null"),f=window.LOCALPR_PREFS;'
+        'var p=(!f||(l&&(l.at||"")>(f.at||"")))?l:f;window.LOCALPR_PREFS=p||null;'
         'if(p&&p.theme&&p.theme!=="auto")document.documentElement.setAttribute("data-theme",p.theme);'
         'if(p&&p.wrap)document.body.classList.add("soft-wrap")}catch(e){}</script>'
         + render_toolbar(model)
@@ -1778,7 +1802,7 @@ def render(model, comments, findings, replies, token):
         + "".join(body)
         + pied
         + "</div></main></div>"
-        + "<script>window.GITAI="
+        + "<script>window.LOCALPR="
         + json.dumps(donnees, ensure_ascii=False).replace("</", "<\\/")
         + ";</script>"
         + f"<script>{read_asset('render.js')}</script>"
@@ -1851,7 +1875,7 @@ def load_replies(dossier):
 
 
 PREFS_FILE = (Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-              / "gitai" / "prefs.json")
+              / "localpr" / "prefs.json")
 THEMES = {"auto", "light", "dark", "dimmed"}
 VIEWS = {"unified", "split"}
 TABS = {2, 4, 8}
@@ -1992,16 +2016,22 @@ class Review:
     def origines(self):
         return {f"http://{h}" for h in self.hotes()}
 
-    def regenerer(self):
-        self.model = build_model(self.repo, self.base)
-        write_atomic(self.out / "diff.json",
-                        json.dumps(self.model, ensure_ascii=False, indent=2))
+    def rendre(self):
+        """The diff stays frozen; the comments do not. Served without this after a save, the page
+        hands a refresh back the state the server started with, and the review only survives in
+        localStorage."""
         findings = index_findings(load_findings(self.findings), self.model)
         page = render(self.model, read_json(self.out / "comments.json"), findings,
                       load_replies(self.out / "replies"), self.token)
         self.blob = page.encode("utf-8")
         write_atomic(self.out / "review.html",
                         page.replace(f'"token": "{self.token}"', '"token": ""'))
+
+    def regenerer(self):
+        self.model = build_model(self.repo, self.base)
+        write_atomic(self.out / "diff.json",
+                        json.dumps(self.model, ensure_ascii=False, indent=2))
+        self.rendre()
         return self.model
 
 
@@ -2053,7 +2083,7 @@ of obedience is a failure. The page shows the reply under its thread on the next
 **To finish**: replay the project's own check (`grep -E '^[a-z-]+:' Makefile`, typically
 `make quality` then the tests) and never claim green without the command's output. Then regenerate
 the page so the replies show up:
-`python3 <path to gitai.py> <root> --out <this directory>`.
+`python3 <path to localpr.py> <root> --out <this directory>`.
 
 **Nothing is ever committed**: the working tree is modified, `git status` / `git diff` is there to
 be read, and the developer commits.
@@ -2105,7 +2135,7 @@ def write_todo(review, state):
 def make_handler(review, stop):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-        server_version = "gitai"
+        server_version = "localpr"
 
         def log_message(self, *args):
             pass
@@ -2139,7 +2169,7 @@ def make_handler(review, stop):
             return secrets.compare_digest(fourni or "", review.token)
 
         def do_OPTIONS(self):
-            """No CORS header: the preflight triggered by X-Gitai-Token makes any request
+            """No CORS header: the preflight triggered by X-Localpr-Token makes any request
             from another page fail before it reaches the handler."""
             self.refuser(403, "origin refused")
 
@@ -2159,7 +2189,7 @@ def make_handler(review, stop):
             self.last_seen()
             if not self.host_ok():
                 return self.refuser(403, "host refused")
-            if not self.token_ok(self.headers.get("X-Gitai-Token")):
+            if not self.token_ok(self.headers.get("X-Localpr-Token")):
                 return self.refuser(403, "missing or invalid token")
             try:
                 taille = int(self.headers.get("Content-Length") or 0)
@@ -2193,6 +2223,7 @@ def make_handler(review, stop):
                     return self.refuser(400, f"state refused: {e}")
                 write_atomic(review.out / "comments.json",
                                 json.dumps(state, ensure_ascii=False, indent=2))
+                review.rendre()
                 if self.path == "/done":
                     write_todo(review, state)
                     (review.out / "done").write_text(
@@ -2284,7 +2315,7 @@ def answers(url, token):
     if not isinstance(url, str) or not isinstance(token, str):
         return False
     req = Request(url.split("/review.html", 1)[0] + "/ping", data=b"{}", method="POST",
-                  headers={"X-Gitai-Token": token, "Content-Type": "application/json"})
+                  headers={"X-Localpr-Token": token, "Content-Type": "application/json"})
     try:
         # http_proxy in the environment would route 127.0.0.1 through the proxy.
         with build_opener(ProxyHandler({})).open(req, timeout=2) as r:
@@ -2363,7 +2394,7 @@ def main():
             return 0
         for t in found:
             state = ("alive" if t["alive"]
-                     else "pid alive but not answering as gitai (stale record, not stopped)"
+                     else "pid alive but not answering as localpr (stale record, not stopped)"
                      if t["pid_alive"] else "process gone (stale record)")
             print(f"{state} · pid {t['pid']} · {t['dossier']}")
             if t["url"]:
@@ -2382,7 +2413,7 @@ def main():
     try:
         repo = repo_root(Path(a.repo).expanduser().resolve())
     except GitUnavailable as e:
-        print(f"gitai : {e}", file=sys.stderr)
+        print(f"localpr : {e}", file=sys.stderr)
         return 2
 
     if a.serve:

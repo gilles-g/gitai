@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "gitai",
+  "name": "localpr",
   "owner": {
     "name": "gilles-g"
   },
@@ -9,14 +9,14 @@
   },
   "plugins": [
     {
-      "name": "gitai",
+      "name": "localpr",
       "source": {
         "source": "github",
-        "repo": "gilles-g/gitai",
-        "ref": "v0.3.0"
+        "repo": "gilles-g/localpr",
+        "ref": "v0.4.0"
       },
       "description": "Review a local git diff in a pull-request-style page, comment on lines, and hand the comments back to Claude with the protocol to apply them.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "category": "workflow",
       "keywords": [
         "review",
