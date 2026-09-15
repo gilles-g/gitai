@@ -714,22 +714,22 @@ body.soft-wrap .diff-table {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.diff-table td.line-num[data-line] {
-  cursor: pointer;
-}
-.diff-table td.line-num[data-line]:hover::after {
-  content: '+';
+.add-comment-btn {
   position: absolute;
   left: 2px;
   top: 1px;
   width: 17px;
   height: 18px;
+  padding: 0;
+  border: 0;
   border-radius: 5px;
   background: var(--accent-emphasis);
   color: var(--fg-on-emphasis);
   font-size: 14px;
   line-height: 17px;
   text-align: center;
+  cursor: pointer;
+  user-select: none;
 }
 .diff-table td.line-code {
   padding: 0 10px 0 22px;

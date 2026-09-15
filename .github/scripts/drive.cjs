@@ -17,7 +17,7 @@ const expect = (label, ok) => { console.log(`  ${ok ? '✓' : '✗'} ${label}`);
   await page.goto(url);
   await page.waitForTimeout(800);
   expect('saved on the server', (await page.locator('#state-enreg').innerText()).includes('saved on the server'));
-  // The view is a machine-wide pref (~/.config/gitai/prefs.json): a split table pairs a deleted
+  // The view is a machine-wide pref (~/.config/localpr/prefs.json): a split table pairs a deleted
   // and an added line on one row, so the row count is only comparable to the model in unified.
   await page.click('#view-unified');
   await page.waitForTimeout(300);
@@ -36,7 +36,12 @@ const expect = (label, ok) => { console.log(`  ${ok ? '✓' : '✗'} ${label}`);
 
   // comment on a new-side line
   const keep = page.locator('.file-diff[data-path="keep.txt"]');
-  await keep.locator('.line-code[data-side="new"][data-line="3"]').click();
+  const keepLine = keep.locator('.line-code[data-side="new"][data-line="3"]');
+  await keepLine.click();
+  await page.waitForTimeout(200);
+  expect('clicking the line alone opens no form', (await page.locator('.form-row-inline').count()) === 0);
+  await keepLine.hover();
+  await page.locator('.add-comment-btn').click();
   await page.locator('.form-row-inline textarea').fill('Trailing newline missing');
   await page.locator('.form-row-inline label[data-sev="nitpick"]').click();
   await page.locator('.form-row-inline [data-ok]').click();
@@ -45,8 +50,22 @@ const expect = (label, ok) => { console.log(`  ${ok ? '✓' : '✗'} ${label}`);
   expect('type label rendered', (await keep.locator('.thread .sev-tag').innerText()) === 'Follow-up');
   expect('tracker lists it', (await page.locator('#tracker-list .tracker-item').count()) === 1);
 
+  await page.reload();
+  await page.waitForTimeout(900);
+  expect('thread still under its line after a refresh',
+    (await keep.locator('.thread-row .thread').count()) === 1 &&
+    (await keep.locator('tr.has-thread').count()) === 1);
+
+  const vierge = await (await browser.newContext()).newPage();
+  await vierge.goto(url);
+  await vierge.waitForTimeout(900);
+  expect('comment served to a browser with no localStorage',
+    (await vierge.locator('.file-diff[data-path="keep.txt"] .thread-row .thread').count()) === 1);
+  await vierge.context().close();
+
   // comment on a deleted line
-  await renamed.locator('.line-code[data-side="old"][data-line="2"]').click();
+  await renamed.locator('.line-code[data-side="old"][data-line="2"]').hover();
+  await page.locator('.add-comment-btn').click();
   await page.locator('.form-row-inline textarea').fill('why uppercase?');
   await page.keyboard.press('Control+Enter');
   await page.waitForTimeout(600);
@@ -64,6 +83,22 @@ const expect = (label, ok) => { console.log(`  ${ok ? '✓' : '✗'} ${label}`);
   await page.locator('.form-row-inline [data-ok]').click();
   await page.waitForTimeout(500);
   expect('markdown escaped', (await page.locator('#globaux .comment-body').innerHTML()) === '<p><strong>bold</strong> and &lt;b&gt;xss?&lt;/b&gt;</p>');
+
+  await page.evaluate(() => {
+    const cle = 'localpr:' + window.LOCALPR.repo + ':' + window.LOCALPR.base;
+    const st = JSON.parse(localStorage.getItem(cle));
+    st.n += 1;
+    st.comments.push({ id: 'C' + st.n, scope: 'global', type: 'fix', side: null, file: null,
+      fichier_index: null, line: null, lineEnd: null, anchor: null, anchorOffset: null,
+      fingerprint: null, body: 'kept while the server was unreachable', origin: null,
+      state: 'open', deposeA: new Date().toISOString() });
+    st.updated = new Date().toISOString();
+    localStorage.setItem(cle, JSON.stringify(st));
+  });
+  await page.reload();
+  await page.waitForTimeout(900);
+  expect('a locally kept comment outlives a page served with an older stamp',
+    (await page.locator('#tracker-list .tracker-item').count()) === 4);
 
   await page.click('#terminer');
   await page.waitForTimeout(1500);
